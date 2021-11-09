@@ -61,7 +61,7 @@ parser.add_argument(
 parser.add_argument(
     '-add_extra_articles_to_end',
     dest='add_extra_articles_to_end',
-    type=bool,
+    #type=bool,
     action='store_true',
     help='Whether to minimize padding by adding extra articles to the end',
 )

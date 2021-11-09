@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-export PYTHONPATH=/home/rowanz/code/fakenewslm
+#export PYTHONPATH=/home/rowanz/code/fakenewslm
 
 learning_rate=1e-4
 init_checkpoint=""
@@ -10,7 +10,7 @@ save_checkpoint_steps=1000
 # You can customize the training here
 # mega, medium, or base
 model_type="base"
-OUTPUT_DIR="gs://" # put your output directory here
+OUTPUT_DIR="gs://yxu98_grover" # put your output directory here
 input_file="gs://" # put your input files here, it can also be something like "*.tfrecord"
 
 if [ ${model_type} == "base" ]; then
