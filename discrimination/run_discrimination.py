@@ -34,25 +34,25 @@ FLAGS = flags.FLAGS
 
 ## Required parameters
 flags.DEFINE_string(
-    "config_file", 'configs/base.json',
+    "config_file", '../lm/configs/base.json',
     "The config json file corresponding to the pre-trained news model. "
     "This specifies the model architecture.")
 
 flags.DEFINE_string(
-    "input_data", None,
+        "input_data", 'gs://yxu98_grover/discrimination-data/base/p=0.96.jsonl',
     "The input data dir. Should contain the .tsv files (or other data files) for the task.")
 
 flags.DEFINE_string(
-    "additional_data", None,
+        "additional_data", 'gs://yxu98_grover/discrimination-data/base/extradata.jsonl',
     "Should we provide additional input data? maybe.")
 
 flags.DEFINE_string(
-    "output_dir", None,
+    "output_dir", 'gs://yxu98_grover/discrimination-try',
     "The output directory where the model checkpoints will be written.")
 
 ## Other parameters
 flags.DEFINE_string(
-    "init_checkpoint", None,
+        "init_checkpoint", 'gs://yxu98_grover/base/model.ckpt',
     "Initial checkpoint (usually from a pre-trained model).")
 
 flags.DEFINE_integer(
@@ -88,10 +88,10 @@ flags.DEFINE_bool("adafactor", False, "Whether to run adafactor")
 
 flags.DEFINE_float("learning_rate", 5e-5, "The initial learning rate for Adam.")
 
-flags.DEFINE_bool("use_tpu", False, "Whether to use TPU or GPU/CPU.")
+flags.DEFINE_bool("use_tpu", True, "Whether to use TPU or GPU/CPU.")
 
 flags.DEFINE_string(
-    "tpu_name", None,
+    "tpu_name", "grover",
     "The Cloud TPU to use for training. This should be either the name "
     "used when creating the Cloud TPU, or a grpc://ip.address.of.tpu:8470 "
     "url.")
@@ -181,6 +181,7 @@ def main(_):
     tf.logging.info("*** Parsing files ***")
     with tf.gfile.Open(FLAGS.input_data, "r") as f:
         for l in f:
+            print(l)
             item = json.loads(l)
 
             # This little hack is because we don't want to tokenize the article twice
@@ -334,6 +335,6 @@ def main(_):
 
 
 if __name__ == "__main__":
-    flags.mark_flag_as_required("input_data")
-    flags.mark_flag_as_required("output_dir")
+    #flags.mark_flag_as_required("input_data")
+    #flags.mark_flag_as_required("output_dir")
     tf.app.run()

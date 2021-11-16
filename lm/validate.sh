@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 
-export PYTHONPATH=/home/rowanz/code/fakenewslm
+#export PYTHONPATH=/home/rowanz/code/fakenewslm
 
 max_seq_length=1024
 num_tpu_cores=8
 batch_size_per_core=2
-model_type=$1
-input_file=""
-OUTPUT_DIR=""
-init_checkpoint=""
-model_type=""
+model_type="base"
+input_file="gs://yxu98_grover/data_1024/val0000.tfrecord"
+OUTPUT_DIR="gs://yxu98_grover/validate"
+init_checkpoint="gs://yxu98_grover/model.ckpt-4000"
+#model_type=""
 
 let batch_size="$batch_size_per_core * $num_tpu_cores"
 

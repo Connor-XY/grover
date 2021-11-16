@@ -11,10 +11,10 @@ save_checkpoint_steps=1000
 # mega, medium, or base
 model_type="base"
 OUTPUT_DIR="gs://yxu98_grover" # put your output directory here
-input_file="gs://" # put your input files here, it can also be something like "*.tfrecord"
+input_file="gs://yxu98_grover/data_1024/train0000.tfrecord" # put your input files here, it can also be something like "*.tfrecord"
 
 if [ ${model_type} == "base" ]; then
-    num_tpu_cores=32
+    num_tpu_cores=8
     batch_size_per_core=16
 elif [ ${model_type} == "medium" ]; then
     num_tpu_cores=128
