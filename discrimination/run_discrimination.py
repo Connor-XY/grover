@@ -39,20 +39,20 @@ flags.DEFINE_string(
     "This specifies the model architecture.")
 
 flags.DEFINE_string(
-        "input_data", 'gs://yxu98_grover/discrimination-data/base/p=0.96.jsonl',
+        "input_data", 'gs://yxu98_grover/discrimination-data/syn_output.jsonl',
     "The input data dir. Should contain the .tsv files (or other data files) for the task.")
 
 flags.DEFINE_string(
-        "additional_data", 'gs://yxu98_grover/discrimination-data/base/extradata.jsonl',
+        "additional_data", None,#'gs://yxu98_grover/discrimination-data/base/extradata.jsonl',
     "Should we provide additional input data? maybe.")
 
 flags.DEFINE_string(
-    "output_dir", 'gs://yxu98_grover/discrimination-try',
+    "output_dir", 'gs://yxu98_grover/discrimination/kevin/',
     "The output directory where the model checkpoints will be written.")
 
 ## Other parameters
 flags.DEFINE_string(
-        "init_checkpoint", 'gs://yxu98_grover/base/model.ckpt',
+        "init_checkpoint", 'gs://yxu98_grover/discrimination/kevin/model.ckpt-1562',
     "Initial checkpoint (usually from a pre-trained model).")
 
 flags.DEFINE_integer(
@@ -70,10 +70,10 @@ flags.DEFINE_integer("max_training_examples", -1, "if you wanna limit the number
 
 flags.DEFINE_bool("do_train", False, "Whether to run training.")
 
-flags.DEFINE_bool("predict_val", False, "Whether to run eval on the dev set.")
+flags.DEFINE_bool("predict_val", True, "Whether to run eval on the dev set.")
 
 flags.DEFINE_bool(
-    "predict_test", False,
+    "predict_test", True,
     "Whether to run the model in inference mode on the test set.")
 
 flags.DEFINE_float("num_train_epochs", 3.0,
@@ -309,7 +309,7 @@ def main(_):
     splits_to_predict = [x for x in ['val', 'test'] if getattr(FLAGS, f'predict_{x}')]
     for split in splits_to_predict:
         num_actual_examples = len(examples[split])
-
+        print(num_actual_examples)
         predict_file = os.path.join(FLAGS.output_dir, f'{split}.tf_record')
         tf.logging.info(f"***** Recreating {split} file {predict_file} *****")
         classification_convert_examples_to_features(examples[split], batch_size=FLAGS.batch_size,
