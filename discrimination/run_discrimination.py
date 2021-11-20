@@ -76,6 +76,11 @@ flags.DEFINE_bool(
     "predict_test", True,
     "Whether to run the model in inference mode on the test set.")
 
+flags.DEFINE_bool(
+    "require_labels", False,
+    "Whether require labels when running eval/test"
+)
+
 flags.DEFINE_float("num_train_epochs", 3.0,
                    "Total number of training epochs to perform.")
 
@@ -179,33 +184,45 @@ def main(_):
     examples = {'train': [], 'val': [], 'test': []}
     np.random.seed(123456)
     tf.logging.info("*** Parsing files ***")
-    with tf.gfile.Open(FLAGS.input_data, "r") as f:
-        for l in f:
-            print(l)
-            item = json.loads(l)
 
-            # This little hack is because we don't want to tokenize the article twice
-            context_ids = _flatten_and_tokenize_metadata(encoder=encoder, item=item)
-            examples[item['split']].append({
-                'info': item,
-                'ids': context_ids,
-                'label': item['label'],
-            })
-            assert item['label'] in LABEL_INV_MAP
-
-    additional_data = {'machine': [], 'human': []}
-    if FLAGS.additional_data is not None:
-        print("NOW WERE LOOKING AT ADDITIONAL INPUT DATA", flush=True)
-        with tf.gfile.Open(FLAGS.additional_data, "r") as f:
+    if FLAGS.require_labels:
+        with tf.gfile.Open(FLAGS.input_data, "r") as f:
             for l in f:
                 item = json.loads(l)
+
                 # This little hack is because we don't want to tokenize the article twice
                 context_ids = _flatten_and_tokenize_metadata(encoder=encoder, item=item)
-                additional_data[item['label']].append({
+                examples[item['split']].append({
                     'info': item,
                     'ids': context_ids,
                     'label': item['label'],
                 })
+                assert item['label'] in LABEL_INV_MAP
+
+        additional_data = {'machine': [], 'human': []}
+        if FLAGS.additional_data is not None:
+            print("NOW WERE LOOKING AT ADDITIONAL INPUT DATA", flush=True)
+            with tf.gfile.Open(FLAGS.additional_data, "r") as f:
+                for l in f:
+                    item = json.loads(l)
+                    # This little hack is because we don't want to tokenize the article twice
+                    context_ids = _flatten_and_tokenize_metadata(encoder=encoder, item=item)
+                    additional_data[item['label']].append({
+                        'info': item,
+                        'ids': context_ids,
+                        'label': item['label'],
+                    })
+    else:
+        with tf.gfile.Open(FLAGS.input_data, "r") as f:
+            for l in f:
+                item = json.loads(l)
+                # This little hack is because we don't want to tokenize the article twice
+                context_ids = _flatten_and_tokenize_metadata(encoder=encoder, item=item)
+                examples[item['split']].append({
+                    'info': item,
+                    'ids': context_ids,
+                })
+        additional_data = {'machine': [], 'human': []}
 
     tf.logging.info("*** Done parsing files ***")
     print("LETS GO", flush=True)
@@ -330,8 +347,9 @@ def main(_):
         _save_np(os.path.join(FLAGS.output_dir, f'{split}-probs.npy'), probs)
 
         preds = np.argmax(probs, 1)
-        labels = np.array([LABEL_INV_MAP[x['label']] for x in examples[split][:num_actual_examples]])
-        print('{} ACCURACY IS {:.3f}'.format(split, np.mean(labels == preds)), flush=True)
+        if FLAGS.require_labels:
+            labels = np.array([LABEL_INV_MAP[x['label']] for x in examples[split][:num_actual_examples]])
+            print('{} ACCURACY IS {:.3f}'.format(split, np.mean(labels == preds)), flush=True)
 
 
 if __name__ == "__main__":
