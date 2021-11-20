@@ -222,6 +222,7 @@ def main(_):
                     'info': item,
                     'ids': context_ids,
                 })
+        print("examples length:", len(examples))
         additional_data = {'machine': [], 'human': []}
 
     tf.logging.info("*** Done parsing files ***")
