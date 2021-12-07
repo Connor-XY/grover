@@ -34,25 +34,25 @@ FLAGS = flags.FLAGS
 
 ## Required parameters
 flags.DEFINE_string(
-    "config_file", '../lm/configs/base.json',
+    "config_file", '../lm/configs/large.json',
     "The config json file corresponding to the pre-trained news model. "
     "This specifies the model architecture.")
 
 flags.DEFINE_string(
-        "input_data", 'gs://yxu98_grover/discrimination-data/syn_output.jsonl',
+        "input_data", 'gs://grover-models/discrimination-data/large/p=0.96.jsonl',
     "The input data dir. Should contain the .tsv files (or other data files) for the task.")
 
 flags.DEFINE_string(
-        "additional_data", None,#'gs://yxu98_grover/discrimination-data/base/extradata.jsonl',
+        "additional_data", 'gs://grover-models/discrimination-data/large/extradata.jsonl',
     "Should we provide additional input data? maybe.")
 
 flags.DEFINE_string(
-    "output_dir", 'gs://yxu98_grover/discrimination/kevin/',
+    "output_dir", 'gs://yanxu98/large-0.96',
     "The output directory where the model checkpoints will be written.")
 
 ## Other parameters
 flags.DEFINE_string(
-        "init_checkpoint", 'gs://yxu98_grover/discrimination/kevin/model.ckpt-1562',
+        "init_checkpoint", 'gs://grover-models/discrimination/generator=medium~discriminator=grover~discsize=medium~dataset=p=0.96/model.ckpt-1562',
     "Initial checkpoint (usually from a pre-trained model).")
 
 flags.DEFINE_integer(
@@ -77,7 +77,7 @@ flags.DEFINE_bool(
     "Whether to run the model in inference mode on the test set.")
 
 flags.DEFINE_bool(
-    "require_labels", False,
+    "require_labels", True,
     "Whether require labels when running eval/test"
 )
 
@@ -156,24 +156,24 @@ def main(_):
                 print(f"EXITING BECAUSE {split}-probs.npy exists", flush=True)
                 return
         # Double check to see if it has trained!
-        if not tf.gfile.Exists(os.path.join(FLAGS.output_dir, 'checkpoint')):
-            print("EXITING BECAUSE NO CHECKPOINT.", flush=True)
-            return
-        stuff = {}
-        with tf.gfile.Open(os.path.join(FLAGS.output_dir, 'checkpoint'), 'r') as f:
-            # model_checkpoint_path: "model.ckpt-0"
-            # all_model_checkpoint_paths: "model.ckpt-0"
-            for l in f:
-                key, val = l.strip().split(': ', 1)
-                stuff[key] = val.strip('"')
-        if stuff['model_checkpoint_path'] == 'model.ckpt-0':
-            print("EXITING BECAUSE IT LOOKS LIKE NOTHING TRAINED", flush=True)
-            return
+        #if not tf.gfile.Exists(os.path.join(FLAGS.output_dir, 'checkpoint')):
+        #    print("EXITING BECAUSE NO CHECKPOINT.", flush=True)
+        #    return
+        #stuff = {}
+        #with tf.gfile.Open(os.path.join(FLAGS.output_dir, 'checkpoint'), 'r') as f:
+        #    # model_checkpoint_path: "model.ckpt-0"
+        #    # all_model_checkpoint_paths: "model.ckpt-0"
+        #    for l in f:
+        #        key, val = l.strip().split(': ', 1)
+        #        stuff[key] = val.strip('"')
+        #if stuff['model_checkpoint_path'] == 'model.ckpt-0':
+        #    print("EXITING BECAUSE IT LOOKS LIKE NOTHING TRAINED", flush=True)
+        #    return
 
 
-    elif not FLAGS.do_train:
-        print("EXITING BECAUSE DO_TRAIN IS FALSE AND PATH DOESNT EXIST")
-        return
+    #elif not FLAGS.do_train:
+    #    print("EXITING BECAUSE DO_TRAIN IS FALSE AND PATH DOESNT EXIST")
+    #    return
     else:
         tf.gfile.MakeDirs(FLAGS.output_dir)
 
