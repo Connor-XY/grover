@@ -39,15 +39,15 @@ flags.DEFINE_string(
     "This specifies the model architecture.")
 
 flags.DEFINE_string(
-        "input_data", 'gs://grover-models/discrimination-data/large/p=0.96.jsonl',
+        "input_data", 'gs://yanxu98/kevin/output.jsonl',#'gs://grover-models/discrimination-data/large/p=0.96.jsonl',
     "The input data dir. Should contain the .tsv files (or other data files) for the task.")
 
 flags.DEFINE_string(
-        "additional_data", 'gs://grover-models/discrimination-data/large/extradata.jsonl',
+        "additional_data", None,#'gs://grover-models/discrimination-data/large/extradata.jsonl',
     "Should we provide additional input data? maybe.")
 
 flags.DEFINE_string(
-    "output_dir", 'gs://yanxu98/large-0.96',
+    "output_dir", 'gs://yanxu98/kevin',
     "The output directory where the model checkpoints will be written.")
 
 ## Other parameters
@@ -61,7 +61,7 @@ flags.DEFINE_integer(
     "Sequences longer than this will be truncated, and sequences shorter "
     "than this will be padded. Must match data generation.")
 
-flags.DEFINE_integer("iterations_per_loop", 1000,
+flags.DEFINE_integer("iterations_per_loop", 32,
                      "How many steps to make in each estimator call.")
 
 flags.DEFINE_integer("batch_size", 32, "Batch size used")
@@ -77,7 +77,7 @@ flags.DEFINE_bool(
     "Whether to run the model in inference mode on the test set.")
 
 flags.DEFINE_bool(
-    "require_labels", True,
+    "require_labels", False,
     "Whether require labels when running eval/test"
 )
 
@@ -185,7 +185,7 @@ def main(_):
     np.random.seed(123456)
     tf.logging.info("*** Parsing files ***")
 
-    if FLAGS.require_labels:
+    if True:
         with tf.gfile.Open(FLAGS.input_data, "r") as f:
             for l in f:
                 item = json.loads(l)
@@ -212,18 +212,6 @@ def main(_):
                         'ids': context_ids,
                         'label': item['label'],
                     })
-    else:
-        with tf.gfile.Open(FLAGS.input_data, "r") as f:
-            for l in f:
-                item = json.loads(l)
-                # This little hack is because we don't want to tokenize the article twice
-                context_ids = _flatten_and_tokenize_metadata(encoder=encoder, item=item)
-                examples[item['split']].append({
-                    'info': item,
-                    'ids': context_ids,
-                })
-        print("examples length:", len(examples))
-        additional_data = {'machine': [], 'human': []}
 
     tf.logging.info("*** Done parsing files ***")
     print("LETS GO", flush=True)
@@ -327,6 +315,8 @@ def main(_):
     splits_to_predict = [x for x in ['val', 'test'] if getattr(FLAGS, f'predict_{x}')]
     for split in splits_to_predict:
         num_actual_examples = len(examples[split])
+        if num_actual_examples == 0:
+            continue
         print(num_actual_examples)
         predict_file = os.path.join(FLAGS.output_dir, f'{split}.tf_record')
         tf.logging.info(f"***** Recreating {split} file {predict_file} *****")

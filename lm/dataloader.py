@@ -145,11 +145,14 @@ def classification_input_fn_builder(input_file, seq_length, is_training,
 
         # For training, we want a lot of parallel reading and shuffling.
         # For eval, we want no shuffling and parallel reading doesn't matter.
+        #options = tf.data.Options()
+        #options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
         d = tf.data.TFRecordDataset(input_file)
         if is_training:
             d = d.repeat()
             d = d.shuffle(buffer_size=buffer_size)
-
+        #else:
+        #    d = d.repeat()
         d = d.apply(
             tf.data.experimental.map_and_batch(
                 lambda record: _decode_record(record, name_to_features),
