@@ -25,6 +25,8 @@ from lm.utils import get_assignment_map_from_checkpoint, get_shape_list, get_att
     construct_scalar_host_call
 from lm.utils import _save_np
 
+tf.enable_eager_execution()
+
 class GroverConfig(object):
     """Configuration for `GroverModel`"""
 
