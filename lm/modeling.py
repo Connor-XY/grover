@@ -23,7 +23,7 @@ import tensorflow as tf
 from lm import optimization_adafactor
 from lm.utils import get_assignment_map_from_checkpoint, get_shape_list, get_attention_mask, gelu, layer_norm, dropout, \
     construct_scalar_host_call
-
+from lm.utils import _save_np
 
 class GroverConfig(object):
     """Configuration for `GroverModel`"""
@@ -486,53 +486,54 @@ class GroverModel(object):
             assert num_heads_ == config.num_attention_heads
             assert features_ == (config.hidden_size // config.num_attention_heads)
             caches = tf.unstack(cache, axis=1)
+        with tf.GradientTape() as tape:
+            with tf.variable_scope(scope, default_name='newslm', reuse=reuse):
+                with tf.variable_scope("embeddings"):
+                    embeddings, self.embedding_table = embed(self.input_ids, config.vocab_size,
+                                                             config.hidden_size,
+                                                             position_offset=self.cache_length,
+                                                             initializer_range=config.initializer_range,
+                                                             max_position_embeddings=config.max_position_embeddings,
+                                                             use_one_hot_embeddings=True)
 
-        with tf.variable_scope(scope, default_name='newslm', reuse=reuse):
-            with tf.variable_scope("embeddings"):
-                embeddings, self.embedding_table = embed(self.input_ids, config.vocab_size,
-                                                         config.hidden_size,
-                                                         position_offset=self.cache_length,
-                                                         initializer_range=config.initializer_range,
-                                                         max_position_embeddings=config.max_position_embeddings,
-                                                         use_one_hot_embeddings=True)
+                mask = get_attention_mask(self.seq_length, self.seq_length + self.cache_length, dtype=embeddings.dtype)
 
-            mask = get_attention_mask(self.seq_length, self.seq_length + self.cache_length, dtype=embeddings.dtype)
+                # We keep the representation as a 2D tensor to avoid re-shaping it back and
+                # forth from a 3D tensor to a 2D tensor. Re-shapes are normally free on
+                # the GPU/CPU but may not be free on the TPU, so we want to minimize them to
+                # help the optimizer.
+                hidden_state = tf.reshape(embeddings, [self.batch_size * self.seq_length, self.config.hidden_size])
+                new_kvs = []
+                for layer_idx, layer_cache in enumerate(caches):
+                    with tf.variable_scope('layer{:02d}'.format(layer_idx)):
+                        # [batch_size * seq_length, hidden_size]
+                        attention_output, new_kv = attention_layer(
+                            hidden_state,
+                            mask,
+                            batch_size=self.batch_size,
+                            seq_length=self.seq_length,
+                            size_per_head=config.hidden_size // config.num_attention_heads,
+                            num_attention_heads=config.num_attention_heads,
+                            initializer_range=config.initializer_range,
+                            hidden_dropout_prob=self.config.hidden_dropout_prob,
+                            attention_probs_dropout_prob=self.config.attention_probs_dropout_prob,
+                            do_cache=do_cache,
+                            cache=layer_cache,
+                        )
+                        new_kvs.append(new_kv)
 
-            # We keep the representation as a 2D tensor to avoid re-shaping it back and
-            # forth from a 3D tensor to a 2D tensor. Re-shapes are normally free on
-            # the GPU/CPU but may not be free on the TPU, so we want to minimize them to
-            # help the optimizer.
-            hidden_state = tf.reshape(embeddings, [self.batch_size * self.seq_length, self.config.hidden_size])
-            new_kvs = []
-            for layer_idx, layer_cache in enumerate(caches):
-                with tf.variable_scope('layer{:02d}'.format(layer_idx)):
-                    # [batch_size * seq_length, hidden_size]
-                    attention_output, new_kv = attention_layer(
-                        hidden_state,
-                        mask,
-                        batch_size=self.batch_size,
-                        seq_length=self.seq_length,
-                        size_per_head=config.hidden_size // config.num_attention_heads,
-                        num_attention_heads=config.num_attention_heads,
-                        initializer_range=config.initializer_range,
-                        hidden_dropout_prob=self.config.hidden_dropout_prob,
-                        attention_probs_dropout_prob=self.config.attention_probs_dropout_prob,
-                        do_cache=do_cache,
-                        cache=layer_cache,
-                    )
-                    new_kvs.append(new_kv)
+                        # [batch_size * seq_length, hidden_size]
+                        hidden_state = residual_mlp_layer(hidden_state + attention_output,
+                                                          intermediate_size=config.intermediate_size,
+                                                          hidden_dropout_prob=self.config.hidden_dropout_prob)
+                self.hidden_state = hidden_state
 
-                    # [batch_size * seq_length, hidden_size]
-                    hidden_state = residual_mlp_layer(hidden_state + attention_output,
-                                                      intermediate_size=config.intermediate_size,
-                                                      hidden_dropout_prob=self.config.hidden_dropout_prob)
-            self.hidden_state = hidden_state
+            self.new_kvs = tf.stack(new_kvs, axis=1) if do_cache else None
 
-        self.new_kvs = tf.stack(new_kvs, axis=1) if do_cache else None
-
-        # Note that the hidden state is still flat (batch_size*hidden_size)
-        self.logits_flat = tf.matmul(self.hidden_state, self.embedding_table, transpose_b=True)
-
+            # Note that the hidden state is still flat (batch_size*hidden_size)
+            self.logits_flat = tf.matmul(self.hidden_state, self.embedding_table, transpose_b=True)
+            _save_np('embedding_grad.npy', tape.gradient(self.logits_flat, embeddings).numpy())
+            _save_np('embedding.npy', self.embedding_table.numpy())
         # THE OUTPUT BIAS DOES NOT SPARK JOY
         # output_bias = tf.get_variable('output_bias', shape=[config.vocab_size], initializer=tf.zeros_initializer())
         # self.logits_flat = tf.nn.bias_add(self.logits_flat, output_bias)
