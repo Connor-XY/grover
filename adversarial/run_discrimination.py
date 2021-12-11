@@ -28,6 +28,8 @@ from lm.modeling import classification_model_fn_builder, GroverConfig
 from lm.utils import _save_np
 from sample.encoder import get_encoder
 
+tf.enable_eager_execution()
+
 flags = tf.flags
 
 FLAGS = flags.FLAGS
