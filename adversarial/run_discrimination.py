@@ -47,7 +47,7 @@ flags.DEFINE_string(
     "Should we provide additional input data? maybe.")
 
 flags.DEFINE_string(
-    "output_dir", 'gs://yanxu98/tinydata',
+    "output_dir", 'gs://yanxu98/tinydata_out',
     "The output directory where the model checkpoints will be written.")
 
 ## Other parameters
@@ -81,7 +81,7 @@ flags.DEFINE_bool(
     "Whether require labels when running eval/test"
 )
 
-flags.DEFINE_float("num_train_epochs", 3.0,
+flags.DEFINE_float("num_train_epochs", 100.0,
                    "Total number of training epochs to perform.")
 
 flags.DEFINE_float(
@@ -147,14 +147,14 @@ def main(_):
     # These lines of code are just to check if we've already saved something into the directory
     if tf.gfile.Exists(FLAGS.output_dir):
         print(f"The output directory {FLAGS.output_dir} exists!")
-        if FLAGS.do_train:
-            print("EXITING BECAUSE DO_TRAIN is true", flush=True)
-            return
-        for split in ['val', 'test']:
-            if tf.gfile.Exists(os.path.join(FLAGS.output_dir, f'{split}-probs.npy')) and getattr(FLAGS,
-                                                                                                 f'predict_{split}'):
-                print(f"EXITING BECAUSE {split}-probs.npy exists", flush=True)
-                return
+        #if FLAGS.do_train:
+        #    print("EXITING BECAUSE DO_TRAIN is true", flush=True)
+        #    return
+        #for split in ['val', 'test']:
+        #    if tf.gfile.Exists(os.path.join(FLAGS.output_dir, f'{split}-probs.npy')) and getattr(FLAGS,
+        #                                                                                         f'predict_{split}'):
+        #        print(f"EXITING BECAUSE {split}-probs.npy exists", flush=True)
+        #        return
         # Double check to see if it has trained!
         #if not tf.gfile.Exists(os.path.join(FLAGS.output_dir, 'checkpoint')):
         #    print("EXITING BECAUSE NO CHECKPOINT.", flush=True)
@@ -189,7 +189,7 @@ def main(_):
         with tf.gfile.Open(FLAGS.input_data, "r") as f:
             for l in f:
                 item = json.loads(l)
-
+                print(item)
                 # This little hack is because we don't want to tokenize the article twice
                 context_ids = _flatten_and_tokenize_metadata(encoder=encoder, item=item)
                 examples[item['split']].append({
@@ -243,7 +243,7 @@ def main(_):
 
     # Training
     if FLAGS.do_train:
-        num_train_steps = int((len(examples['train']) / FLAGS.batch_size) * FLAGS.num_train_epochs)
+        num_train_steps = int(len(examples['train']) * FLAGS.num_train_epochs / FLAGS.batch_size)
         num_warmup_steps = int(num_train_steps * FLAGS.warmup_proportion)
         assert num_train_steps > 0
     else:
