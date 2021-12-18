@@ -18,19 +18,18 @@ For discrimination finetuning (e.g. saying whether or not the generation is huma
 """
 import json
 import os
+import sys
 
 import numpy as np
 import tensorflow as tf
-from tensorflow.python.lib.io import file_io
 
-from lm.dataloader import classification_convert_examples_to_features, classification_input_fn_builder
-from lm.modeling import classification_model_fn_builder, GroverConfig
+from lm.dataloader import classification_convert_examples_to_features, classification_input_fn_builder, classification_input_dataset
+from lm.modeling import classification_model_fn_builder, GroverConfig, GroverModelTF2
 from lm.utils import _save_np
+from lm.optimization_adafactor import CustomSchedule
 from sample.encoder import get_encoder
 
-tf.enable_eager_execution()
-
-flags = tf.flags
+flags = tf.compat.v1.flags
 
 FLAGS = flags.FLAGS
 
@@ -144,10 +143,8 @@ def main(_):
     LABEL_LIST = ['machine', 'human']
     LABEL_INV_MAP = {label: i for i, label in enumerate(LABEL_LIST)}
 
-    tf.logging.set_verbosity(tf.logging.INFO)
-
     # These lines of code are just to check if we've already saved something into the directory
-    if tf.gfile.Exists(FLAGS.output_dir):
+    if tf.io.gfile.exists(FLAGS.output_dir):
         print(f"The output directory {FLAGS.output_dir} exists!")
         #if FLAGS.do_train:
         #    print("EXITING BECAUSE DO_TRAIN is true", flush=True)
@@ -177,7 +174,7 @@ def main(_):
     #    print("EXITING BECAUSE DO_TRAIN IS FALSE AND PATH DOESNT EXIST")
     #    return
     else:
-        tf.gfile.MakeDirs(FLAGS.output_dir)
+        tf.io.gfile.makedirs(FLAGS.output_dir)
 
     news_config = GroverConfig.from_json_file(FLAGS.config_file)
 
@@ -185,13 +182,12 @@ def main(_):
     encoder = get_encoder()
     examples = {'train': [], 'val': [], 'test': []}
     np.random.seed(123456)
-    tf.logging.info("*** Parsing files ***")
+    tf.print("*** Parsing files ***", output_stream=sys.stdout)
 
     if True:
-        with tf.gfile.Open(FLAGS.input_data, "r") as f:
+        with tf.io.gfile.GFile(FLAGS.input_data, "r") as f:
             for l in f:
                 item = json.loads(l)
-                print(item)
                 # This little hack is because we don't want to tokenize the article twice
                 context_ids = _flatten_and_tokenize_metadata(encoder=encoder, item=item)
                 examples[item['split']].append({
@@ -204,7 +200,7 @@ def main(_):
         additional_data = {'machine': [], 'human': []}
         if FLAGS.additional_data is not None:
             print("NOW WERE LOOKING AT ADDITIONAL INPUT DATA", flush=True)
-            with tf.gfile.Open(FLAGS.additional_data, "r") as f:
+            with tf.io.gfile.GFile(FLAGS.additional_data, "r") as f:
                 for l in f:
                     item = json.loads(l)
                     # This little hack is because we don't want to tokenize the article twice
@@ -214,8 +210,7 @@ def main(_):
                         'ids': context_ids,
                         'label': item['label'],
                     })
-
-    tf.logging.info("*** Done parsing files ***")
+    tf.print("*** Done parsing files ***", output_stream=sys.stdout)
     print("LETS GO", flush=True)
     if FLAGS.max_training_examples > 0:
 
@@ -255,64 +250,51 @@ def main(_):
     # Boilerplate
     tpu_cluster_resolver = None
     if FLAGS.use_tpu and FLAGS.tpu_name:
-        tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
+        tpu_cluster_resolver = tf.distribute.cluster_resolver.TPUClusterResolver(
             FLAGS.tpu_name, zone=FLAGS.tpu_zone, project=FLAGS.gcp_project)
 
-    is_per_host = tf.contrib.tpu.InputPipelineConfig.PER_HOST_V2
-    run_config = tf.contrib.tpu.RunConfig(
-        cluster=tpu_cluster_resolver,
-        master=FLAGS.master,
-        model_dir=FLAGS.output_dir,
-        save_checkpoints_steps=FLAGS.iterations_per_loop,
-        keep_checkpoint_max=None,
-        tpu_config=tf.contrib.tpu.TPUConfig(
-            iterations_per_loop=FLAGS.iterations_per_loop,
-            num_shards=FLAGS.num_tpu_cores,
-            per_host_input_for_training=is_per_host))
+    tf.config.experimental_connect_to_cluster(tpu_cluster_resolver)
+    tf.tpu.experimental.initialize_tpu_system(tpu_cluster_resolver)
+    strategy = tf.distribute.TPUStrategy(tpu_cluster_resolver)
+    with strategy.scope():
+        model = GroverModelTF2(config=news_config,
+                               batch_size=FLAGS.batch_size,
+                               seq_length=FLAGS.max_seq_length,
+                               pad_token_id=news_config.pad_token_id,
+                               chop_off_last_token=False)
+        learning_rate = CustomSchedule(news_config.hidden_size)
 
-    model_fn = classification_model_fn_builder(
-        news_config,
-        init_checkpoint=FLAGS.init_checkpoint,
-        learning_rate=FLAGS.learning_rate,
-        num_train_steps=num_train_steps,
-        num_warmup_steps=num_warmup_steps,
-        use_tpu=FLAGS.use_tpu,
-        num_labels=len(LABEL_LIST),
-        pool_token_id=encoder.begin_summary,
-        adafactor=FLAGS.adafactor
-    )
+        optimizer = tf.keras.optimizers.Adam(learning_rate, beta_1=0.9, beta_2=0.98,
+                                             epsilon=1e-9)
 
-    # If TPU is not available, this will fall back to normal Estimator on CPU
-    # or GPU.
-    estimator = tf.contrib.tpu.TPUEstimator(
-        use_tpu=FLAGS.use_tpu,
-        model_fn=model_fn,
-        config=run_config,
-        train_batch_size=FLAGS.batch_size,
-        eval_batch_size=FLAGS.batch_size,
-        predict_batch_size=FLAGS.batch_size,
-        params={'model_dir': FLAGS.output_dir}
-    )
+        model.compile(optimizer=optimizer,
+                      # Anything between 2 and `steps_per_epoch` could help here.
+                      steps_per_execution = 2,
+                      loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
+                      metrics=['sparse_categorical_accuracy'])
+    model.load_weights(FLAGS.init_checkpoint)
 
     if FLAGS.do_train:
         train_file = os.path.join(FLAGS.output_dir, "train.tf_record")
 
-        tf.logging.info(f"***** Recreating training file at {train_file} *****")
+        tf.print(f"***** Recreating training file at {train_file} *****")
         classification_convert_examples_to_features(examples['train'], batch_size=FLAGS.batch_size,
                                                     max_seq_length=FLAGS.max_seq_length,
                                                     encoder=encoder, output_file=train_file,
                                                     labels=LABEL_LIST,
                                                     chop_from_front_if_needed=False)
-        tf.logging.info("***** Running training *****")
-        tf.logging.info("  Num examples = %d", len(examples['train']))
-        tf.logging.info("  Num epochs = %d", FLAGS.num_train_epochs)
-        tf.logging.info("  Batch size = %d", FLAGS.batch_size)
-        tf.logging.info("  Num steps = %d", num_train_steps)
+        tf.print("***** Running training *****")
+        tf.print("  Num examples = %d", len(examples['train']))
+        tf.print("  Num epochs = %d", FLAGS.num_train_epochs)
+        tf.print("  Batch size = %d", FLAGS.batch_size)
+        tf.print("  Num steps = %d", num_train_steps)
+        train_input_dataset = classification_input_dataset(input_file=train_file, seq_length=FLAGS.max_seq_length,
+                                                           is_training=True, drop_remainder=True,batch_size=FLAGS.batch_size)
 
-        train_input_fn = classification_input_fn_builder(input_file=train_file, seq_length=FLAGS.max_seq_length,
-                                                         is_training=True, drop_remainder=True,
-                                                         )
-        estimator.train(input_fn=train_input_fn, steps=num_train_steps)
+        model.fit(train_input_dataset, epochs=5,
+                  steps_per_epoch=num_train_steps,
+                  validation_data=train_input_dataset,
+                  validation_steps=num_train_steps)
 
     splits_to_predict = [x for x in ['val', 'test'] if getattr(FLAGS, f'predict_{x}')]
     for split in splits_to_predict:
@@ -321,19 +303,18 @@ def main(_):
             continue
         print(num_actual_examples)
         predict_file = os.path.join(FLAGS.output_dir, f'{split}.tf_record')
-        tf.logging.info(f"***** Recreating {split} file {predict_file} *****")
+        tf.print(f"***** Recreating {split} file {predict_file} *****")
         classification_convert_examples_to_features(examples[split], batch_size=FLAGS.batch_size,
                                                     max_seq_length=FLAGS.max_seq_length,
                                                     encoder=encoder, output_file=predict_file,
                                                     labels=LABEL_LIST, pad_extra_examples=True,
                                                     chop_from_front_if_needed=False)
-
-        val_input_fn = classification_input_fn_builder(input_file=predict_file, seq_length=FLAGS.max_seq_length,
-                                                       is_training=False, drop_remainder=True,
-                                                       )
+        val_input_dataset = classification_input_dataset(input_file=predict_file, seq_length=FLAGS.max_seq_length,
+                                                         is_training=False, drop_remainder=True,batch_size=FLAGS.batch_size)
 
         probs = np.zeros((num_actual_examples, 2), dtype=np.float32)
-        for i, res in enumerate(estimator.predict(input_fn=val_input_fn, yield_single_examples=True)):
+        result = model.predict(val_input_dataset)
+        for i, res in enumerate(result):
             if i < num_actual_examples:
                 probs[i] = res['probs']
 
@@ -348,4 +329,5 @@ def main(_):
 if __name__ == "__main__":
     #flags.mark_flag_as_required("input_data")
     #flags.mark_flag_as_required("output_dir")
-    tf.app.run()
+    tf.compat.v1.app.run()
+

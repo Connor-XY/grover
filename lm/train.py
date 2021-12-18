@@ -103,9 +103,9 @@ def main(_):
     for input_pattern in FLAGS.input_file.split(","):
         input_files.extend(tf.gfile.Glob(input_pattern))
 
-    tf.logging.info("*** Input Files ***")
+    tf.print("*** Input Files ***")
     for input_file in input_files:
-        tf.logging.info("  %s" % input_file)
+        tf.print("  %s" % input_file)
 
     tpu_cluster_resolver = None
     if FLAGS.use_tpu and FLAGS.tpu_name:
@@ -143,8 +143,8 @@ def main(_):
         params={'model_dir': FLAGS.output_dir}
     )
 
-    tf.logging.info("***** Running training *****")
-    tf.logging.info("  Batch size = %d", FLAGS.train_batch_size)
+    tf.print("***** Running training *****")
+    tf.print("  Batch size = %d", FLAGS.train_batch_size)
     train_input_fn = input_fn_builder(
         input_files=input_files,
         seq_length=FLAGS.max_seq_length,

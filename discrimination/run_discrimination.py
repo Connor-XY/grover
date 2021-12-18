@@ -183,7 +183,7 @@ def main(_):
     encoder = get_encoder()
     examples = {'train': [], 'val': [], 'test': []}
     np.random.seed(123456)
-    tf.logging.info("*** Parsing files ***")
+    tf.print("*** Parsing files ***")
 
     if True:
         with tf.gfile.Open(FLAGS.input_data, "r") as f:
@@ -213,7 +213,7 @@ def main(_):
                         'label': item['label'],
                     })
 
-    tf.logging.info("*** Done parsing files ***")
+    tf.print("*** Done parsing files ***")
     print("LETS GO", flush=True)
     if FLAGS.max_training_examples > 0:
 
@@ -295,17 +295,17 @@ def main(_):
     if FLAGS.do_train:
         train_file = os.path.join(FLAGS.output_dir, "train.tf_record")
 
-        tf.logging.info(f"***** Recreating training file at {train_file} *****")
+        tf.print(f"***** Recreating training file at {train_file} *****")
         classification_convert_examples_to_features(examples['train'], batch_size=FLAGS.batch_size,
                                                     max_seq_length=FLAGS.max_seq_length,
                                                     encoder=encoder, output_file=train_file,
                                                     labels=LABEL_LIST,
                                                     chop_from_front_if_needed=False)
-        tf.logging.info("***** Running training *****")
-        tf.logging.info("  Num examples = %d", len(examples['train']))
-        tf.logging.info("  Num epochs = %d", FLAGS.num_train_epochs)
-        tf.logging.info("  Batch size = %d", FLAGS.batch_size)
-        tf.logging.info("  Num steps = %d", num_train_steps)
+        tf.print("***** Running training *****")
+        tf.print("  Num examples = %d", len(examples['train']))
+        tf.print("  Num epochs = %d", FLAGS.num_train_epochs)
+        tf.print("  Batch size = %d", FLAGS.batch_size)
+        tf.print("  Num steps = %d", num_train_steps)
 
         train_input_fn = classification_input_fn_builder(input_file=train_file, seq_length=FLAGS.max_seq_length,
                                                          is_training=True, drop_remainder=True,
@@ -319,7 +319,7 @@ def main(_):
             continue
         print(num_actual_examples)
         predict_file = os.path.join(FLAGS.output_dir, f'{split}.tf_record')
-        tf.logging.info(f"***** Recreating {split} file {predict_file} *****")
+        tf.print(f"***** Recreating {split} file {predict_file} *****")
         classification_convert_examples_to_features(examples[split], batch_size=FLAGS.batch_size,
                                                     max_seq_length=FLAGS.max_seq_length,
                                                     encoder=encoder, output_file=predict_file,

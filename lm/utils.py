@@ -53,11 +53,11 @@ def assert_rank(tensor, expected_rank, name=None):
 
     actual_rank = tensor.shape.ndims
     if actual_rank not in expected_rank_dict:
-        scope_name = tf.get_variable_scope().name
+
         raise ValueError(
-            "For the tensor `%s` in scope `%s`, the actual rank "
+            "For the tensor `%s` , the actual rank "
             "`%d` (shape = %s) is not equal to the expected rank `%s`" %
-            (name, scope_name, actual_rank, str(tensor.shape), str(expected_rank)))
+            (name, actual_rank, str(tensor.shape), str(expected_rank)))
 
 
 def get_shape_list(tensor, expected_rank=None, name=None):
@@ -102,14 +102,13 @@ def gelu(input_tensor):
 
     This is a smoother version of the RELU.
     Original paper: https://arxiv.org/abs/1606.08415
-
     Args:
       input_tensor: float Tensor to perform activation.
 
     Returns:
       `input_tensor` with the GELU activation applied.
     """
-    cdf = 0.5 * (1.0 + tf.erf(input_tensor / tf.sqrt(2.0)))
+    cdf = 0.5 * (1.0 + tf.math.erf(input_tensor / tf.sqrt(2.0)))
     return input_tensor * cdf
 
 
@@ -154,6 +153,8 @@ def get_attention_mask(nd, ns, *, dtype):
     m = i >= j - ns + nd
     return tf.cast(m, dtype)
 
+def get_attention_mask_bandpart(nd, ns, *, dtype):
+    return tf.linalg.band_part(tf.ones([nd, ns], dtype=dtype), -1, ns-nd)
 
 def get_assignment_map_from_checkpoint(tvars, init_checkpoint):
     """Compute the union of the current variables and checkpoint variables."""

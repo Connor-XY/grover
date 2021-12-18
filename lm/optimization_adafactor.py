@@ -84,8 +84,7 @@ def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps, use_tpu):
     }
     return train_op, train_metrics
 
-
-class AdaFactorOptimizer(tf.train.Optimizer):
+class AdaFactorOptimizer(tf.keras.optimizers.Optimizer):
     """here's the optimizer we'll use"""
 
     def __init__(self,
@@ -229,6 +228,20 @@ class AdaFactorOptimizer(tf.train.Optimizer):
             param_name = m.group(1)
         return param_name
 
+class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
+    def __init__(self, d_model, warmup_steps=4000):
+        super(CustomSchedule, self).__init__()
+
+        self.d_model = d_model
+        self.d_model = tf.cast(self.d_model, tf.float32)
+
+        self.warmup_steps = warmup_steps
+
+    def __call__(self, step):
+        arg1 = tf.math.rsqrt(step)
+        arg2 = step * (self.warmup_steps ** -1.5)
+
+        return tf.math.rsqrt(self.d_model) * tf.math.minimum(arg1, arg2)
 
 def reduce_rms(x):
     return tf.sqrt(tf.reduce_mean(tf.square(x)))
