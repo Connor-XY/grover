@@ -20,7 +20,7 @@ import tensorflow as tf
 def _decode_record(record, name_to_features):
     """Decodes a record to a TensorFlow example."""
     example = tf.io.parse_single_example(record, name_to_features)
-
+    print(example)
     # tf.Example only supports tf.int64, but the TPU only supports tf.int32.
     # So cast all int64 to int32.
     for name in list(example.keys()):
@@ -180,6 +180,7 @@ def classification_input_dataset(input_file, seq_length, is_training,
         d = d.shuffle(buffer_size=buffer_size)
     #else:
     #    d = d.repeat()
-    d = d.batch(batch_size=batch_size, drop_remainder=drop_remainder)
+    #d = d.batch(batch_size=batch_size, drop_remainder=drop_remainder)
     d = d.map(lambda record: _decode_record(record, name_to_features))
+    d = d.batch(batch_size=batch_size, drop_remainder=drop_remainder)
     return d

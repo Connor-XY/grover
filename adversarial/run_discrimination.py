@@ -267,7 +267,7 @@ def main(_):
         optimizer = tf.keras.optimizers.Adam(learning_rate, beta_1=0.9, beta_2=0.98,
                                              epsilon=1e-9)
 
-        model.compile(optimizer=optimizer,
+        model.compile(optimizer='adam',
                       # Anything between 2 and `steps_per_epoch` could help here.
                       steps_per_execution = 2,
                       loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),

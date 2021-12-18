@@ -440,6 +440,7 @@ def embed(input_ids,
 
 class embed_tf2(tf.keras.layers.Layer):
     def __init__(self,vocab_size,seq_length,embedding_size,position_offset=0,initializer_range=0.02,max_position_embeddings=512,use_one_hot_embeddings=True):
+        super(embed_tf2,self).__init__()
         self.vocab_size = vocab_size
         self.seq_length = seq_length
         self.embedding_size = embedding_size
@@ -715,6 +716,7 @@ class GroverModelTF2(tf.keras.Model):
                                     it means the last token in input_ids will not be processed by the model as input
         :param scope: scope to run this on
         """
+        super(GroverModelTF2,self).__init__()
         self.config = copy.deepcopy(config)
         # self.is_training = is_training
         self.pad_token_id = pad_token_id
@@ -723,7 +725,10 @@ class GroverModelTF2(tf.keras.Model):
         self.batch_size = batch_size
         self.seq_length = seq_length
 
+        self.cache_length = 0
+
         self.embedder = embed_tf2(config.vocab_size,
+                                  self.seq_length,
                                   config.hidden_size,
                                   position_offset=self.cache_length,
                                   initializer_range=config.initializer_range,
@@ -738,53 +743,45 @@ class GroverModelTF2(tf.keras.Model):
             hidden_dropout_prob=self.config.hidden_dropout_prob,
             attention_probs_dropout_prob=self.config.attention_probs_dropout_prob,
             do_cache=do_cache) for _ in range(config.num_hidden_layers)]
-        self.residual_mlp_layers = [residual_mlp_layer(intermediate_size=config.intermediate_size,
+        self.residual_mlp_layers = [residual_mlp_layer_tf2(intermediate_size=config.intermediate_size,
+                                                       hidden_size=config.hidden_size,
                                                        hidden_dropout_prob=self.config.hidden_dropout_prob)
                                     for _ in range(config.num_hidden_layers) ]
 
-    def call(self, input_ids, cache, training=None, mask=None):
+    def call(self, input_ids, training=None, mask=None):
         if not training:
             self.config.hidden_dropout_prob = 0.0
             self.config.attention_probs_dropout_prob = 0.0
-        if cache is None:
-            caches = [None] * self.config.num_hidden_layers
-            self.cache_length = 0
-        else:
-            batch_size_, num_layers_, two_, num_heads_, self.cache_length, features_ = get_shape_list(
-                cache, expected_rank=6)
-            assert batch_size_ == self.batch_size
-            assert num_layers_ == self.config.num_hidden_layers
-            assert two_ == 2
-            assert num_heads_ == self.config.num_attention_heads
-            assert features_ == (self.config.hidden_size // self.config.num_attention_heads)
-            caches = tf.unstack(cache, axis=1)
+        
+        #caches = [None] * self.config.num_hidden_layers
+        self.cache_length = 0
         if self.chop_off_last_token:
-            self.target_ids = input_ids[:, 1:]
-            self.input_ids = input_ids[:, :-1]
+            target_ids = input_ids[:, 1:]
+            input_ids = input_ids[:, :-1]
         else:
-            self.input_ids = input_ids
-            self.target_ids = tf.concat((input_ids[:, 1:],
+            input_ids = input_ids
+            target_ids = tf.concat((input_ids[:, 1:],
                                          tf.constant(self.pad_token_id, dtype=self.input_ids.dtype,
                                                      shape=[get_shape_list(self.input_ids, 2)[0], 1])), 1)
-        embeddings, embedding_table = self.embedder(self.input_ids)
+        embeddings, embedding_table = self.embedder(input_ids)
         mask = get_attention_mask_bandpart(self.seq_length, self.seq_length + self.cache_length, dtype=embeddings.dtype)
         hidden_state = tf.reshape(embeddings, [self.batch_size * self.seq_length, self.config.hidden_size])
-        new_kvs = []
-        for layer_idx, layer_cache in enumerate(caches):
+        #new_kvs = []
+        for layer_idx in range(self.config.num_hidden_layers):
             # [batch_size * seq_length, hidden_size]
             attention_output, new_kv = self.attention_layers[layer_idx](
                 hidden_state,
                 mask,
                 layer_cache
             )
-            new_kvs.append(new_kv)
+            #new_kvs.append(new_kv)
             # [batch_size * seq_length, hidden_size]
             hidden_state = self.residual_mlp_layers[layer_idx](hidden_state + attention_output)
-        self.hidden_state = hidden_state
-        self.new_kvs = tf.stack(new_kvs, axis=1) if self.do_cache else None
+        #self.hidden_state = hidden_state
+        #self.new_kvs = tf.stack(new_kvs, axis=1) if self.do_cache else None
         # Note that the hidden state is still flat (batch_size*hidden_size)
-        self.logits_flat = tf.matmul(self.hidden_state, self.embedding_table, transpose_b=True)
-        return self.logits_flat
+        logits_flat = tf.matmul(hidden_state, embedding_table, transpose_b=True)
+        return logits_flat
 
     @property
     def log_probs(self):
