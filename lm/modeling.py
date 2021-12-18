@@ -746,12 +746,12 @@ class GroverModelTF2(tf.keras.Model):
         self.residual_mlp_layers = [residual_mlp_layer_tf2(intermediate_size=config.intermediate_size,
                                                        hidden_size=config.hidden_size,
                                                        hidden_dropout_prob=self.config.hidden_dropout_prob)
-                                    for _ in range(config.num_hidden_layers) ]
+                                    for _ in range(config.num_hidden_layers)]
 
-    def call(self, input_ids, training=None, mask=None):
-        if not training:
-            self.config.hidden_dropout_prob = 0.0
-            self.config.attention_probs_dropout_prob = 0.0
+    def call(self, input_ids):
+        # if not training:
+        #     self.config.hidden_dropout_prob = 0.0
+        #     self.config.attention_probs_dropout_prob = 0.0
         
         #caches = [None] * self.config.num_hidden_layers
         self.cache_length = 0
@@ -772,7 +772,6 @@ class GroverModelTF2(tf.keras.Model):
             attention_output, new_kv = self.attention_layers[layer_idx](
                 hidden_state,
                 mask,
-                layer_cache
             )
             #new_kvs.append(new_kv)
             # [batch_size * seq_length, hidden_size]
