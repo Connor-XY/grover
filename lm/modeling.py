@@ -311,7 +311,7 @@ class attention_layer_tf2(tf.keras.layers.Layer):
 
         context_layer_projected = self.context_layer_dense(context_layer)
         context_layer_projected = dropout(context_layer_projected, self.hidden_dropout_prob)
-        return context_layer_projected, cached_keys_and_values
+        return context_layer_projected
 
 def residual_mlp_layer(x_flat, intermediate_size, initializer_range=0.02, hidden_dropout_prob=0.1):
     """
@@ -769,7 +769,7 @@ class GroverModelTF2(tf.keras.Model):
         #new_kvs = []
         for layer_idx in range(self.config.num_hidden_layers):
             # [batch_size * seq_length, hidden_size]
-            attention_output, new_kv = self.attention_layers[layer_idx](
+            attention_output = self.attention_layers[layer_idx](
                 hidden_state,
                 mask,
             )
