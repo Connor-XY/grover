@@ -1,0 +1,2 @@
+from tensorflow.python.tools.inspect_checkpoint import print_tensors_in_checkpoint_file
+print_tensors_in_checkpoint_file(file_name='gs://grover-models/discrimination/generator=base~discriminator=grover~discsize=base~dataset=p=0.96/model.ckpt-1562')
