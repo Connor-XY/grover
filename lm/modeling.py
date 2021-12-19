@@ -450,8 +450,8 @@ class embed_tf2(tf.keras.layers.Layer):
         self.initializer_range = initializer_range
         self.max_position_embeddings = max_position_embeddings
         self.use_one_hot_embeddings = use_one_hot_embeddings
-        self.full_position_embeddings = tf.keras.layers.Embedding(max_position_embeddings, embedding_size, name="newslm/embeddings/word_embed")
-        self.embedding_table = tf.keras.layers.Embedding(vocab_size, embedding_size, name="newslm/embeddings/pos_embed")
+        self.full_position_embeddings = tf.keras.layers.Embedding(max_position_embeddings, embedding_size, name="newslm/embeddings/pos_embed")
+        self.embedding_table = tf.keras.layers.Embedding(vocab_size, embedding_size, name="newslm/embeddings/word_embed")
         self.ln = tf.keras.layers.LayerNormalization(name="newslm/embeddings/LayerNorm_embed_norm")
     def call(self, x, *args, **kwargs):
         embedded_input = self.embedding_table(x)
@@ -781,6 +781,7 @@ class GroverModelTF2(tf.keras.Model):
                                                      shape=[get_shape_list(input_ids, 2)[0], 1])), 1)
         #print(input_ids.shape)
         embeddings, embedding_table = self.embedder(input_ids)
+        #print(embedding_table.get_weights())
         #print(embeddings.shape)
         mask = get_attention_mask_bandpart(self.seq_length, self.seq_length + self.cache_length, dtype=embeddings.dtype)
         hidden_state = tf.reshape(embeddings, [-1, self.config.hidden_size])

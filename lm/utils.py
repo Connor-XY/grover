@@ -75,11 +75,11 @@ def get_shape_list(tensor, expected_rank=None, name=None):
       be returned as python integers, and dynamic dimensions will be returned
       as tf.Tensor scalars.
     """
-    if name is None:
-        name = tensor.name
+    #if name is None:
+    #    name = tensor.name
 
-    if expected_rank is not None:
-        assert_rank(tensor, expected_rank, name)
+    #if expected_rank is not None:
+    #    assert_rank(tensor, expected_rank, name)
 
     shape = tensor.shape.as_list()
 

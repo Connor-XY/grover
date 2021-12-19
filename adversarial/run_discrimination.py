@@ -22,6 +22,7 @@ import sys
 
 import numpy as np
 import tensorflow as tf
+import tensorflow.compat.v1 as tf1
 
 from lm.dataloader import classification_convert_examples_to_features, classification_input_fn_builder, classification_input_dataset, classification_convert_examples_to_features_new
 from lm.modeling import classification_model_fn_builder, GroverConfig, GroverModelTF2
@@ -276,8 +277,18 @@ def main(_):
                       #steps_per_execution = 2,
                       loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
                       metrics=['SparseCategoricalCrossentropy'])
-    ckpt = tf.train.Checkpoint(variables=[model.get_weights()])
-    ckpt.restore(FLAGS.init_checkpoint).assert_consumed()
+    #weights = [model.embedder.full_position_embeddings, model.embedder.embedding_table, model.embedder.ln]
+    #for weight in weights:
+    #    print(weight.get_weights())
+    #for layer in layers:
+    #    print(layer.get_config(), layer.get_weights())
+    #print(weights)
+    #saver = tf1.train.Saver(var_list=model.layers)
+    #saver.restore(sess=None, save_path=FLAGS.init_checkpoint)
+    #ckpt = tf.train.Checkpoint(variables=weights)
+    #ckpt.restore(FLAGS.init_checkpoint).assert_consumed()
+    model.load_weights(FLAGS.init_checkpoint)
+    print(model.embedder.embedding_table.get_weights())
 
     if FLAGS.do_train:
         train_file = os.path.join(FLAGS.output_dir, "train.tf_record")
@@ -295,8 +306,15 @@ def main(_):
         tf.print("  Num steps = %d", num_train_steps)
         train_input_dataset = classification_input_dataset(input_file=train_file, seq_length=FLAGS.max_seq_length,
                                                            is_training=True, drop_remainder=True,batch_size=FLAGS.batch_size)
-
-
+        for input_ids,label in train_input_dataset:
+            with tf.GradientTape() as tape:
+                #tape.watch(model.embedder.embedding_table)
+                pred = model(input_ids)
+                loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)(label, pred)
+            gradient = tape.gradient(loss, model.trainable_variables)
+            print(model.trainable_variables)
+            #print(gradient)
+           
 
         model.fit(train_input_dataset, epochs=5,
                   steps_per_epoch=num_train_steps,
