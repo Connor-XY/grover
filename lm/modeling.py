@@ -269,7 +269,6 @@ class attention_layer_tf2(tf.keras.layers.Layer):
         # self.attention_mask = attention_mask
         self.batch_size = batch_size
         self.seq_length = seq_length
-        self.name = name
         self.size_per_head = size_per_head
         self.num_attention_heads = num_attention_heads
         # self.cache = cache
@@ -280,17 +279,17 @@ class attention_layer_tf2(tf.keras.layers.Layer):
 
         self.aptq = _attention_projection_and_transpose_tf2(batch_size=batch_size, seq_length=seq_length,
                                                             num_attention_heads=num_attention_heads, size_per_head=size_per_head,
-                                                            name=self.name+'/query_layer',
+                                                            name=name+'/query_layer',
                                                             initializer_range=initializer_range)
         self.aptk = _attention_projection_and_transpose_tf2(batch_size=batch_size, seq_length=seq_length,
                                                             num_attention_heads=num_attention_heads, size_per_head=size_per_head,
-                                                            name=self.name+'/key_layer',
+                                                            name=name+'/key_layer',
                                                             initializer_range=initializer_range)
         self.aptv = _attention_projection_and_transpose_tf2(batch_size=batch_size, seq_length=seq_length,
                                                             num_attention_heads=num_attention_heads, size_per_head=size_per_head,
-                                                            name=self.name+'/value_layer',
+                                                            name=name+'/value_layer',
                                                             initializer_range=initializer_range)
-        self.context_layer_dense = tf.keras.layers.Dense(self.num_attention_heads * self.size_per_head, kernel_initializer=create_initializer(self.initializer_range), name=self.name+'/context_projection_layer')
+        self.context_layer_dense = tf.keras.layers.Dense(self.num_attention_heads * self.size_per_head, kernel_initializer=create_initializer(self.initializer_range), name=name+'/context_projection_layer')
     def call(self, x, mask):
         query = self.aptq(x)
         key = self.aptk(x)
@@ -353,19 +352,18 @@ class residual_mlp_layer_tf2(tf.keras.layers.Layer):
         self.hidden_size = hidden_size
         self.initializer_range = initializer_range
         self.hidden_dropout_prob = hidden_dropout_prob
-        self.name = name
-        self.ln1 = tf.keras.layers.LayerNormalization(name=self.name+'LayerNorm_mlp_ln0')
+        self.ln1 = tf.keras.layers.LayerNormalization(name=name+'LayerNorm_mlp_ln0')
         self.d1 = tf.keras.layers.Dense(
             intermediate_size,
             activation=gelu,
             kernel_initializer=create_initializer(initializer_range),
-            name=self.name+'/intermediate',
+            name=name+'/intermediate',
         )
         self.d2 = tf.keras.layers.Dense(
             hidden_size,
-            name=self.name+'/output',
+            name=name+'/output',
             kernel_initializer=create_initializer(initializer_range))
-        self.ln2 = tf.keras.layers.LayerNormalization(name=self.name+'LayerNorm_mlp_ln1')
+        self.ln2 = tf.keras.layers.LayerNormalization(name=name+'LayerNorm_mlp_ln1')
     def call(self, x, *args, **kwargs):
         x_norm = self.ln1(x)
         ix = self.d1(x_norm)
