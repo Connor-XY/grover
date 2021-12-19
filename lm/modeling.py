@@ -290,7 +290,7 @@ class attention_layer_tf2(tf.keras.layers.Layer):
                                                             name=name+'/value_layer',
                                                             initializer_range=initializer_range)
         self.context_layer_dense = tf.keras.layers.Dense(self.num_attention_heads * self.size_per_head, kernel_initializer=create_initializer(self.initializer_range), name=name+'/context_projection_layer')
-    def call(self, x, mask):
+    def call(self, x, mask, training):
         query = self.aptq(x)
         key = self.aptk(x)
         value = self.aptv(x)
@@ -312,7 +312,8 @@ class attention_layer_tf2(tf.keras.layers.Layer):
         context_layer = tf.reshape(context_layer, [-1, self.num_attention_heads * self.size_per_head])
 
         context_layer_projected = self.context_layer_dense(context_layer)
-        context_layer_projected = dropout(context_layer_projected, self.hidden_dropout_prob)
+        if training:
+            context_layer_projected = dropout(context_layer_projected, self.hidden_dropout_prob)
         return context_layer_projected
 
 def residual_mlp_layer(x_flat, intermediate_size, initializer_range=0.02, hidden_dropout_prob=0.1):
@@ -364,11 +365,12 @@ class residual_mlp_layer_tf2(tf.keras.layers.Layer):
             name=name+'/output',
             kernel_initializer=create_initializer(initializer_range))
         self.ln2 = tf.keras.layers.LayerNormalization(name=name+'LayerNorm_mlp_ln1')
-    def call(self, x, *args, **kwargs):
+    def call(self, x, training):
         x_norm = self.ln1(x)
         ix = self.d1(x_norm)
         ox = self.d2(ix)
-        ox = dropout(ox, self.hidden_dropout_prob)
+        if training:
+            ox = dropout(ox, self.hidden_dropout_prob)
         lo = self.ln2(x + ox)
         return lo
 
@@ -764,7 +766,7 @@ class GroverModelTF2(tf.keras.Model):
             name='classification/logits'
         )
 
-    def call(self, input_ids):
+    def call(self, input_ids, training):
         # if not training:
         #     self.config.hidden_dropout_prob = 0.0
         #     self.config.attention_probs_dropout_prob = 0.0
@@ -802,7 +804,8 @@ class GroverModelTF2(tf.keras.Model):
         pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(input_ids, self.pool_token_id), tf.float32), 1), tf.int32)
         #print(hidden_state.shape)
         hidden_state = tf.gather(hidden_state, tf.range(input_ids.shape[0], dtype=tf.int32) * self.seq_length + pool_idx)
-        #hidden_state = tf.nn.dropout(hidden_state, rate=0.1)
+        if training:
+            hidden_state = tf.nn.dropout(hidden_state, rate=0.1)
         logits = self.final_dense(hidden_state)
 
         # target_ids_flat = tf.reshape(target_ids, [-1])
