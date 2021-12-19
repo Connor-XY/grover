@@ -35,7 +35,7 @@ FLAGS = flags.FLAGS
 
 ## Required parameters
 flags.DEFINE_string(
-    "config_file", '../lm/configs/large.json',
+    "config_file", '../lm/configs/base.json',
     "The config json file corresponding to the pre-trained news model. "
     "This specifies the model architecture.")
 
@@ -53,7 +53,7 @@ flags.DEFINE_string(
 
 ## Other parameters
 flags.DEFINE_string(
-        "init_checkpoint", 'gs://grover-models/discrimination/generator=medium~discriminator=grover~discsize=medium~dataset=p=0.96/model.ckpt-1562',
+        "init_checkpoint", 'gs://grover-models/discrimination/generator=base~discriminator=grover~discsize=base~dataset=p=0.96/model.ckpt-1562',
     "Initial checkpoint (usually from a pre-trained model).")
 
 flags.DEFINE_integer(
@@ -273,7 +273,7 @@ def main(_):
 
         model.compile(optimizer='adam',
                       # Anything between 2 and `steps_per_epoch` could help here.
-                      steps_per_execution = 2,
+                      #steps_per_execution = 2,
                       loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
                       metrics=['SparseCategoricalCrossentropy'])
     model.load_weights(FLAGS.init_checkpoint)

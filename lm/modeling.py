@@ -159,8 +159,10 @@ class _attention_projection_and_transpose_tf2(tf.keras.layers.Layer):
         self.project_layer = tf.keras.layers.Dense(num_attention_heads * size_per_head,name=name,kernel_initializer=create_initializer(initializer_range))
     def call(self, x):
         x = self.project_layer(x)
+        #print(x.shape)
+        #print(self.batch_size, self.seq_length, self.num_attention_heads, self.size_per_head)
         x = tf.reshape(
-            x, [self.batch_size, self.seq_length, self.num_attention_heads, self.size_per_head])
+            x, [-1, self.seq_length, self.num_attention_heads, self.size_per_head])
         x = tf.transpose(x, [0, 2, 1, 3])
         return x
 
@@ -288,17 +290,17 @@ class attention_layer_tf2(tf.keras.layers.Layer):
                                                             name='value_layer',
                                                             initializer_range=initializer_range)
         self.context_layer_dense = tf.keras.layers.Dense(self.num_attention_heads * self.size_per_head, kernel_initializer=create_initializer(self.initializer_range), name='context_projection_layer')
-    def call(self, x, mask, cache):
+    def call(self, x, mask):
         query = self.aptq(x)
         key = self.aptk(x)
         value = self.aptv(x)
         # Add to cache
-        cached_keys_and_values = tf.stack([key, value], axis=1) if self.do_cache else None
+        #cached_keys_and_values = tf.stack([key, value], axis=1) if self.do_cache else None
         # Things that were relevant from the cache
-        if cache is not None:
-            pk, pv = tf.unstack(self.cache, axis=1)
-            key = tf.concat([pk, key], axis=-2)
-            value = tf.concat([pv, value], axis=-2)
+        #if cache is not None:
+        #    pk, pv = tf.unstack(self.cache, axis=1)
+        #    key = tf.concat([pk, key], axis=-2)
+        #    value = tf.concat([pv, value], axis=-2)
         attention_scores = tf.matmul(query, key, transpose_b=True)
         dk = tf.cast(self.size_per_head, tf.float32)
         attention_scores = attention_scores / tf.math.sqrt(dk)
@@ -307,7 +309,7 @@ class attention_layer_tf2(tf.keras.layers.Layer):
 
         context_layer = tf.matmul(attention_probs, value)
         context_layer = tf.transpose(context_layer, [0, 2, 1, 3])
-        context_layer = tf.reshape(context_layer, [self.batch_size * self.seq_length, self.num_attention_heads * self.size_per_head])
+        context_layer = tf.reshape(context_layer, [-1, self.num_attention_heads * self.size_per_head])
 
         context_layer_projected = self.context_layer_dense(context_layer)
         context_layer_projected = dropout(context_layer_projected, self.hidden_dropout_prob)
@@ -752,7 +754,7 @@ class GroverModelTF2(tf.keras.Model):
                                                        hidden_size=config.hidden_size,
                                                        hidden_dropout_prob=self.config.hidden_dropout_prob)
                                     for _ in range(config.num_hidden_layers)]
-        self.final_dense = tf.keras.layers.dense(
+        self.final_dense = tf.keras.layers.Dense(
             num_labels,
             kernel_initializer=create_initializer(config.initializer_range),
             name='logits'
@@ -771,11 +773,13 @@ class GroverModelTF2(tf.keras.Model):
         else:
             input_ids = input_ids
             target_ids = tf.concat((input_ids[:, 1:],
-                                         tf.constant(self.pad_token_id, dtype=self.input_ids.dtype,
-                                                     shape=[get_shape_list(self.input_ids, 2)[0], 1])), 1)
+                                         tf.constant(self.pad_token_id, dtype=input_ids.dtype,
+                                                     shape=[get_shape_list(input_ids, 2)[0], 1])), 1)
+        #print(input_ids.shape)
         embeddings, embedding_table = self.embedder(input_ids)
+        #print(embeddings.shape)
         mask = get_attention_mask_bandpart(self.seq_length, self.seq_length + self.cache_length, dtype=embeddings.dtype)
-        hidden_state = tf.reshape(embeddings, [self.batch_size * self.seq_length, self.config.hidden_size])
+        hidden_state = tf.reshape(embeddings, [-1, self.config.hidden_size])
         #new_kvs = []
         for layer_idx in range(self.config.num_hidden_layers):
             # [batch_size * seq_length, hidden_size]
@@ -789,10 +793,11 @@ class GroverModelTF2(tf.keras.Model):
         #self.hidden_state = hidden_state
         #self.new_kvs = tf.stack(new_kvs, axis=1) if self.do_cache else None
         # Note that the hidden state is still flat (batch_size*hidden_size)
-        logits_flat = tf.matmul(hidden_state, embedding_table, transpose_b=True)
+        #logits_flat = tf.matmul(hidden_state, embedding_table, transpose_b=True)
         pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(input_ids, self.pool_token_id), tf.float32), 1), tf.int32)
-        hidden_state = tf.gather(hidden_state, tf.range(self.batch_size, dtype=tf.int32) * self.seq_length + pool_idx)
-        hidden_state = tf.nn.dropout(hidden_state, dropout_prob=0.1)
+        #print(hidden_state.shape)
+        hidden_state = tf.gather(hidden_state, tf.range(input_ids.shape[0], dtype=tf.int32) * self.seq_length + pool_idx)
+        #hidden_state = tf.nn.dropout(hidden_state, rate=0.1)
         logits = self.final_dense(hidden_state)
 
         # target_ids_flat = tf.reshape(target_ids, [-1])
