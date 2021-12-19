@@ -698,10 +698,13 @@ class GroverModelTF2(tf.keras.Model):
                  # is_training,
                  batch_size,
                  seq_length,
+                 num_labels,
+                 pool_token_id,
                  # cache=None,
                  do_cache=False,
                  pad_token_id=0,
                  chop_off_last_token=True,
+
                  scope=None,
                  reuse=False):
         """
@@ -724,6 +727,8 @@ class GroverModelTF2(tf.keras.Model):
 
         self.batch_size = batch_size
         self.seq_length = seq_length
+        self.num_labels = num_labels
+        self.pool_token_id = pool_token_id
 
         self.cache_length = 0
 
@@ -747,12 +752,17 @@ class GroverModelTF2(tf.keras.Model):
                                                        hidden_size=config.hidden_size,
                                                        hidden_dropout_prob=self.config.hidden_dropout_prob)
                                     for _ in range(config.num_hidden_layers)]
+        self.final_dense = tf.keras.layers.dense(
+            num_labels,
+            kernel_initializer=create_initializer(config.initializer_range),
+            name='logits'
+        )
 
     def call(self, input_ids):
         # if not training:
         #     self.config.hidden_dropout_prob = 0.0
         #     self.config.attention_probs_dropout_prob = 0.0
-        
+
         #caches = [None] * self.config.num_hidden_layers
         self.cache_length = 0
         if self.chop_off_last_token:
@@ -780,48 +790,37 @@ class GroverModelTF2(tf.keras.Model):
         #self.new_kvs = tf.stack(new_kvs, axis=1) if self.do_cache else None
         # Note that the hidden state is still flat (batch_size*hidden_size)
         logits_flat = tf.matmul(hidden_state, embedding_table, transpose_b=True)
-        return logits_flat
+        pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(input_ids, self.pool_token_id), tf.float32), 1), tf.int32)
+        hidden_state = tf.gather(hidden_state, tf.range(self.batch_size, dtype=tf.int32) * self.seq_length + pool_idx)
+        hidden_state = tf.nn.dropout(hidden_state, dropout_prob=0.1)
+        logits = self.final_dense(hidden_state)
 
-    @property
-    def log_probs(self):
-        logprobs_flat = tf.nn.log_softmax(self.logits_flat, axis=-1)
-        return tf.reshape(logprobs_flat, [self.batch_size, self.seq_length, -1])
+        # target_ids_flat = tf.reshape(target_ids, [-1])
+        # label_weights = tf.cast(tf.not_equal(target_ids_flat, self.pad_token_id), dtype=self.logits_flat.dtype)
+        # one_hot_labels = tf.one_hot(target_ids_flat,
+        #                             depth=self.config.vocab_size,
+        #                             dtype=self.logits_flat.dtype)
+        # # [batch_size * seq_length, vocab_size]
+        # logprobs_flat = tf.nn.log_softmax(logits_flat, axis=-1)
+        # per_example_loss = -tf.reduce_sum(logprobs_flat * one_hot_labels, axis=[-1])
+        # numerator = tf.reduce_sum(label_weights * per_example_loss)
+        # denominator = tf.reduce_sum(label_weights) + 1e-5
+        # lm_loss = numerator / denominator
 
-    def lm_loss(self):
-        """
-        :return: stuff
-        """
-        target_ids_flat = tf.reshape(self.target_ids, [-1])
+        # log_probs = tf.nn.log_softmax(logits, axis=-1)
+        # one_hot_labels = tf.one_hot(label_ids, depth=self.num_labels, dtype=tf.float32)
+        # per_example_loss = -tf.reduce_sum(one_hot_labels * log_probs, axis=-1)
+        # class_loss = tf.reduce_mean(per_example_loss)
+        # total_loss = lm_loss_coef * model.lm_loss() + class_loss
+        return logits #, lm_loss
+        # # loss
+        # log_probs = tf.nn.log_softmax(logits, axis=-1)
+        # one_hot_labels = tf.one_hot(label_ids, depth=self.num_labels, dtype=tf.float32)
+        # per_example_loss = -tf.reduce_sum(one_hot_labels * log_probs, axis=-1)
+        # class_loss = tf.reduce_mean(per_example_loss)
+        # total_loss = lm_loss_coef * model.lm_loss() + class_loss
 
-        # 1 if it's valid and 0 otherwise.
-        label_weights = tf.cast(tf.not_equal(target_ids_flat, self.pad_token_id), dtype=self.logits_flat.dtype)
 
-        # [batch_size * seq_length, vocab_size]
-        one_hot_labels = tf.one_hot(target_ids_flat,
-                                    depth=self.config.vocab_size,
-                                    dtype=self.logits_flat.dtype)
-
-        # [batch_size * seq_length, vocab_size]
-        logprobs_flat = tf.nn.log_softmax(self.logits_flat, axis=-1)
-
-        per_example_loss = -tf.reduce_sum(logprobs_flat * one_hot_labels, axis=[-1])
-
-        # per_example_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self.logits_flat, labels=target_ids_flat)
-
-        numerator = tf.reduce_sum(label_weights * per_example_loss)
-        denominator = tf.reduce_sum(label_weights) + 1e-5
-        loss = numerator / denominator
-        embedding_grad = tf.gradients(loss, self.embedding_table)[0]
-        return loss
-
-    def pooled_output(self, clf_token):
-        """
-        Extract pooled output given a token that says where we should look
-        :param clf_token:
-        :return:
-        """
-        pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(self.input_ids, clf_token), tf.float32), 1), tf.int32)
-        return tf.gather(self.hidden_state, tf.range(self.batch_size, dtype=tf.int32) * self.seq_length + pool_idx)
 
 
 def model_fn_builder(config: GroverConfig, init_checkpoint, learning_rate,

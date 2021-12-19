@@ -30,6 +30,10 @@ def _decode_record(record, name_to_features):
         example[name] = t
     return example
 
+def _decode_record_new(record, name_to_features):
+    """Decodes a record to a TensorFlow example."""
+    example = tf.io.parse_single_example(record, name_to_features)
+    return example["input_ids"], example["label_ids"]
 
 # skip input dataset for lm training/evaluation
 def input_fn_builder(input_files,
@@ -128,6 +132,45 @@ def classification_convert_examples_to_features(
             writer.write(tf_example.SerializeToString())
     writer.close()
 
+#  ~~~~~~~~~~~~~~ This is for classification / AF ~~~~~~~~~~~~~~~~~~
+def classification_convert_examples_to_features_new(
+        examples, max_seq_length, batch_size, encoder, output_file, labels, pad_extra_examples=False,
+        chop_from_front_if_needed=True):
+    """Convert a set of `InputExample`s to a TFRecord file."""
+
+    writer = tf.io.TFRecordWriter(output_file)
+
+    label_map = {label: i for i, label in enumerate(labels)}
+
+    for (ex_index, example) in enumerate(examples):
+        if ex_index % 10000 == 0:
+            tf.print("Writing example %d of %d" % (ex_index, len(examples)))
+
+        # begin_summary is our [CLS] token
+        tokens = example['ids'] + [encoder.begin_summary]
+
+        if len(tokens) > max_seq_length:
+            if chop_from_front_if_needed:
+                tokens = tokens[-max_seq_length:]
+            else:
+                tokens = example['ids'][:(max_seq_length-1)] + [encoder.begin_summary]
+        elif len(tokens) < max_seq_length:
+            tokens.extend([encoder.padding] * (max_seq_length - len(tokens)))
+
+        features = collections.OrderedDict()
+        features['input_ids'] = tf.train.Feature(int64_list=tf.train.Int64List(value=tokens))
+        features['label_ids'] = tf.train.Feature(int64_list=tf.train.Int64List(value=[label_map[example['label']]]))
+        tf_example = tf.train.Example(features=tf.train.Features(feature=features))
+        writer.write(tf_example.SerializeToString())
+
+    if pad_extra_examples:
+        for x in range(len(examples) % batch_size):
+            features = collections.OrderedDict()
+            features['input_ids'] = tf.train.Feature(int64_list=tf.train.Int64List(value=[0]*max_seq_length))
+            features['label_ids'] = tf.train.Feature(int64_list=tf.train.Int64List(value=[0]))
+            tf_example = tf.train.Example(features=tf.train.Features(feature=features))
+            writer.write(tf_example.SerializeToString())
+    writer.close()
 
 def classification_input_fn_builder(input_file, seq_length, is_training,
                                     drop_remainder,
@@ -170,7 +213,6 @@ def classification_input_dataset(input_file, seq_length, is_training,
     name_to_features = {
         "input_ids": tf.io.FixedLenFeature([seq_length], tf.int64),
         "label_ids": tf.io.FixedLenFeature([], tf.int64),
-        "is_real_example": tf.io.FixedLenFeature([], tf.int64),
     }
     # For training, we want a lot of parallel reading and shuffling.
     # For eval, we want no shuffling and parallel reading doesn't matter.
@@ -181,6 +223,6 @@ def classification_input_dataset(input_file, seq_length, is_training,
     #else:
     #    d = d.repeat()
     #d = d.batch(batch_size=batch_size, drop_remainder=drop_remainder)
-    d = d.map(lambda record: _decode_record(record, name_to_features))
+    d = d.map(lambda record: _decode_record_new(record, name_to_features))
     d = d.batch(batch_size=batch_size, drop_remainder=drop_remainder)
     return d

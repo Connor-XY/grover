@@ -23,10 +23,10 @@ import sys
 import numpy as np
 import tensorflow as tf
 
-from lm.dataloader import classification_convert_examples_to_features, classification_input_fn_builder, classification_input_dataset
+from lm.dataloader import classification_convert_examples_to_features, classification_input_fn_builder, classification_input_dataset, classification_convert_examples_to_features_new
 from lm.modeling import classification_model_fn_builder, GroverConfig, GroverModelTF2
 from lm.utils import _save_np
-from lm.optimization_adafactor import CustomSchedule
+from lm.optimization_adafactor import CustomSchedule, loss_function
 from sample.encoder import get_encoder
 
 flags = tf.compat.v1.flags
@@ -260,25 +260,29 @@ def main(_):
         model = GroverModelTF2(config=news_config,
                                batch_size=FLAGS.batch_size,
                                seq_length=FLAGS.max_seq_length,
+                               num_labels=len(LABEL_LIST),
+                               pool_token_id=encoder.begin_summary,
                                pad_token_id=news_config.pad_token_id,
-                               chop_off_last_token=False)
+                               chop_off_last_token=False,
+                               )
         learning_rate = CustomSchedule(news_config.hidden_size)
 
         optimizer = tf.keras.optimizers.Adam(learning_rate, beta_1=0.9, beta_2=0.98,
                                              epsilon=1e-9)
 
+
         model.compile(optimizer='adam',
                       # Anything between 2 and `steps_per_epoch` could help here.
                       steps_per_execution = 2,
                       loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
-                      metrics=['sparse_categorical_accuracy'])
+                      metrics=['SparseCategoricalCrossentropy'])
     model.load_weights(FLAGS.init_checkpoint)
 
     if FLAGS.do_train:
         train_file = os.path.join(FLAGS.output_dir, "train.tf_record")
 
         tf.print(f"***** Recreating training file at {train_file} *****")
-        classification_convert_examples_to_features(examples['train'], batch_size=FLAGS.batch_size,
+        classification_convert_examples_to_features_new(examples['train'], batch_size=FLAGS.batch_size,
                                                     max_seq_length=FLAGS.max_seq_length,
                                                     encoder=encoder, output_file=train_file,
                                                     labels=LABEL_LIST,
@@ -290,6 +294,8 @@ def main(_):
         tf.print("  Num steps = %d", num_train_steps)
         train_input_dataset = classification_input_dataset(input_file=train_file, seq_length=FLAGS.max_seq_length,
                                                            is_training=True, drop_remainder=True,batch_size=FLAGS.batch_size)
+
+
 
         model.fit(train_input_dataset, epochs=5,
                   steps_per_epoch=num_train_steps,
@@ -304,7 +310,7 @@ def main(_):
         print(num_actual_examples)
         predict_file = os.path.join(FLAGS.output_dir, f'{split}.tf_record')
         tf.print(f"***** Recreating {split} file {predict_file} *****")
-        classification_convert_examples_to_features(examples[split], batch_size=FLAGS.batch_size,
+        classification_convert_examples_to_features_new(examples[split], batch_size=FLAGS.batch_size,
                                                     max_seq_length=FLAGS.max_seq_length,
                                                     encoder=encoder, output_file=predict_file,
                                                     labels=LABEL_LIST, pad_extra_examples=True,

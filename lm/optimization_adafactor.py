@@ -16,6 +16,13 @@ import re
 import tensorflow as tf
 from lm.utils import get_shape_list
 
+def loss_function(logits, label_ids, num_labels, lm_loss_coef, lm_loss):
+    log_probs = tf.nn.log_softmax(logits, axis=-1)
+    one_hot_labels = tf.one_hot(label_ids, depth=num_labels, dtype=tf.float32)
+    per_example_loss = -tf.reduce_sum(one_hot_labels * log_probs, axis=-1)
+    class_loss = tf.reduce_mean(per_example_loss)
+    total_loss = lm_loss_coef * lm_loss + class_loss
+    return total_loss
 
 def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps, use_tpu):
     """Creates an optimizer training op."""
