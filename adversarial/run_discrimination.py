@@ -276,7 +276,8 @@ def main(_):
                       #steps_per_execution = 2,
                       loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
                       metrics=['SparseCategoricalCrossentropy'])
-    model.load_weights(FLAGS.init_checkpoint)
+    ckpt = tf.train.Checkpoint(variables=[model.get_weights()])
+    ckpt.restore(FLAGS.init_checkpoint).assert_consumed()
 
     if FLAGS.do_train:
         train_file = os.path.join(FLAGS.output_dir, "train.tf_record")
