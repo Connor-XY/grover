@@ -262,13 +262,14 @@ def attention_layer(x_flat, attention_mask, batch_size, seq_length, size_per_hea
     return context_layer_projected, cached_keys_and_values
 
 class attention_layer_tf2(tf.keras.layers.Layer):
-    def __init__(self, batch_size, seq_length, size_per_head=512, num_attention_heads=1, *,
+    def __init__(self, batch_size, seq_length, name, size_per_head=512, num_attention_heads=1, *,
                  initializer_range=0.02, hidden_dropout_prob=0.1,
                  attention_probs_dropout_prob=0.1, do_cache=False):
         super(attention_layer_tf2, self).__init__()
         # self.attention_mask = attention_mask
         self.batch_size = batch_size
         self.seq_length = seq_length
+        self.name = name
         self.size_per_head = size_per_head
         self.num_attention_heads = num_attention_heads
         # self.cache = cache
@@ -279,17 +280,17 @@ class attention_layer_tf2(tf.keras.layers.Layer):
 
         self.aptq = _attention_projection_and_transpose_tf2(batch_size=batch_size, seq_length=seq_length,
                                                             num_attention_heads=num_attention_heads, size_per_head=size_per_head,
-                                                            name='query_layer',
+                                                            name=self.name+'/query_layer',
                                                             initializer_range=initializer_range)
         self.aptk = _attention_projection_and_transpose_tf2(batch_size=batch_size, seq_length=seq_length,
                                                             num_attention_heads=num_attention_heads, size_per_head=size_per_head,
-                                                            name='key_layer',
+                                                            name=self.name+'/key_layer',
                                                             initializer_range=initializer_range)
         self.aptv = _attention_projection_and_transpose_tf2(batch_size=batch_size, seq_length=seq_length,
                                                             num_attention_heads=num_attention_heads, size_per_head=size_per_head,
-                                                            name='value_layer',
+                                                            name=self.name+'/value_layer',
                                                             initializer_range=initializer_range)
-        self.context_layer_dense = tf.keras.layers.Dense(self.num_attention_heads * self.size_per_head, kernel_initializer=create_initializer(self.initializer_range), name='context_projection_layer')
+        self.context_layer_dense = tf.keras.layers.Dense(self.num_attention_heads * self.size_per_head, kernel_initializer=create_initializer(self.initializer_range), name=self.name+'/context_projection_layer')
     def call(self, x, mask):
         query = self.aptq(x)
         key = self.aptk(x)
@@ -346,24 +347,25 @@ def residual_mlp_layer(x_flat, intermediate_size, initializer_range=0.02, hidden
     return layer_output
 
 class residual_mlp_layer_tf2(tf.keras.layers.Layer):
-    def __init__(self, intermediate_size, hidden_size, initializer_range=0.02, hidden_dropout_prob=0.1):
+    def __init__(self, intermediate_size, hidden_size, name, initializer_range=0.02, hidden_dropout_prob=0.1):
         super(residual_mlp_layer_tf2,self).__init__()
         self.intermediate_size = intermediate_size
         self.hidden_size = hidden_size
         self.initializer_range = initializer_range
         self.hidden_dropout_prob = hidden_dropout_prob
-        self.ln1 = tf.keras.layers.LayerNormalization()
+        self.name = name
+        self.ln1 = tf.keras.layers.LayerNormalization(name=self.name+'LayerNorm_mlp_ln0')
         self.d1 = tf.keras.layers.Dense(
             intermediate_size,
             activation=gelu,
             kernel_initializer=create_initializer(initializer_range),
-            name='intermediate',
+            name=self.name+'/intermediate',
         )
         self.d2 = tf.keras.layers.Dense(
             hidden_size,
-            name='output',
+            name=self.name+'/output',
             kernel_initializer=create_initializer(initializer_range))
-        self.ln2 = tf.keras.layers.LayerNormalization()
+        self.ln2 = tf.keras.layers.LayerNormalization(name=self.name+'LayerNorm_mlp_ln1')
     def call(self, x, *args, **kwargs):
         x_norm = self.ln1(x)
         ix = self.d1(x_norm)
@@ -450,9 +452,9 @@ class embed_tf2(tf.keras.layers.Layer):
         self.initializer_range = initializer_range
         self.max_position_embeddings = max_position_embeddings
         self.use_one_hot_embeddings = use_one_hot_embeddings
-        self.full_position_embeddings = tf.keras.layers.Embedding(max_position_embeddings, embedding_size)
-        self.embedding_table = tf.keras.layers.Embedding(vocab_size, embedding_size)
-        self.ln = tf.keras.layers.LayerNormalization()
+        self.full_position_embeddings = tf.keras.layers.Embedding(max_position_embeddings, embedding_size, name="newslm/embeddings/word_embed")
+        self.embedding_table = tf.keras.layers.Embedding(vocab_size, embedding_size, name="newslm/embeddings/pos_embed")
+        self.ln = tf.keras.layers.LayerNormalization(name="newslm/embeddings/LayerNorm_embed_norm")
     def call(self, x, *args, **kwargs):
         embedded_input = self.embedding_table(x)
         flat_pos_ids = (tf.range(self.seq_length, dtype=tf.int32) + self.position_offset)
@@ -744,20 +746,24 @@ class GroverModelTF2(tf.keras.Model):
         self.attention_layers = [attention_layer_tf2(
             batch_size=self.batch_size,
             seq_length=self.seq_length,
+            name="newslm/layer{}".format(str(i).zfill(2)),
             size_per_head=config.hidden_size // config.num_attention_heads,
             num_attention_heads=config.num_attention_heads,
             initializer_range=config.initializer_range,
             hidden_dropout_prob=self.config.hidden_dropout_prob,
             attention_probs_dropout_prob=self.config.attention_probs_dropout_prob,
-            do_cache=do_cache) for _ in range(config.num_hidden_layers)]
+            do_cache=do_cache,
+            ) for i in range(config.num_hidden_layers)]
         self.residual_mlp_layers = [residual_mlp_layer_tf2(intermediate_size=config.intermediate_size,
-                                                       hidden_size=config.hidden_size,
-                                                       hidden_dropout_prob=self.config.hidden_dropout_prob)
-                                    for _ in range(config.num_hidden_layers)]
+                                                           name="newslm/layer{}".format(str(i).zfill(2)),
+                                                           hidden_size=config.hidden_size,
+                                                           hidden_dropout_prob=self.config.hidden_dropout_prob,
+                                                            )
+                                    for i in range(config.num_hidden_layers)]
         self.final_dense = tf.keras.layers.Dense(
             num_labels,
             kernel_initializer=create_initializer(config.initializer_range),
-            name='logits'
+            name='classification/logits'
         )
 
     def call(self, input_ids):
