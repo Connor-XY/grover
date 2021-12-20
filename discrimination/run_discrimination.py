@@ -142,7 +142,9 @@ def _flatten_and_tokenize_metadata(encoder, item):
             encoded_val = encoder.encode(val)
             for i in range(len(encoded_val)):
                 if encoded_val[i] in adversarial_dict.keys():
+                    print(i)
                     encoded_val[i] = adversarial_dict[encoded_val[i]]
+            print(val)
             metadata.extend(encoder.encode(val))
             metadata.append(encoder.__dict__[f'end_{key}'])
     print(encoder.decode(metadata))
