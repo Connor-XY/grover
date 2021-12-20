@@ -17,7 +17,7 @@ import copy
 import json
 import math
 
-import keras.layers
+#import keras.layers
 import six
 import tensorflow as tf
 
@@ -439,8 +439,7 @@ def embed(input_ids,
             embedded_input += seq_embeds[None]
 
             # embedded_input += tf.slice(full_position_embeddings[position_offset:], [0, 0], [seq_length, -1])[None]
-    embedding = tf.keras.layers.LayerNormalization()(embedded_input)
-    return embedding, embedding_table
+    return layer_norm(embedded_input, name='embed_norm'), embedding_table
 
 class embed_tf2(tf.keras.layers.Layer):
     def __init__(self,vocab_size,seq_length,embedding_size,position_offset=0,initializer_range=0.02,max_position_embeddings=512,use_one_hot_embeddings=True):
@@ -683,8 +682,6 @@ class GroverModel(object):
         denominator = tf.reduce_sum(label_weights) + 1e-5
         loss = numerator / denominator
         embedding_grad = tf.gradients(loss, self.embedding_table)[0]
-        _save_np("embedding_table.npy", self.embedding_table.numpy())
-        _save_np("embedding_grad.npy", embedding_grad.numpy())
         return loss
 
     def pooled_output(self, clf_token):

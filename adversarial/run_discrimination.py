@@ -312,7 +312,21 @@ def main(_):
                 pred = model(input_ids)
                 loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)(label, pred)
             gradient = tape.gradient(loss, model.trainable_variables)
-            print(model.trainable_variables)
+            #print(model.trainable_variables[1])
+            #print(model.trainable_variables[1].numpy())
+            print(gradient[1])
+            indices = tf.make_ndarray(tf.make_tensor_proto(gradient[1].indices))
+            values  = tf.make_ndarray(tf.make_tensor_proto(gradient[1].values))
+            with open('embed+grad.npy', 'wb') as f:
+                np.save(f, model.trainable_variables[1].numpy())
+                grad = np.zeros_like(model.trainable_variables[1].numpy())
+                cnt = 0
+                for idx in indices:
+                    grad[idx,:] = values[cnt,:]
+                    cnt+=1
+                    print(idx, cnt)
+                np.save(f, grad)
+            assert 0
             #print(gradient)
            
 

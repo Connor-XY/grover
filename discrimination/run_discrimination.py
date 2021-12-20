@@ -39,7 +39,7 @@ flags.DEFINE_string(
     "This specifies the model architecture.")
 
 flags.DEFINE_string(
-        "input_data", 'gs://yanxu98/kevin/output.jsonl',#'gs://grover-models/discrimination-data/large/p=0.96.jsonl',
+        "input_data", 'gs://yanxu98/my-result/realnews_tiny-test.jsonl',#'gs://grover-models/discrimination-data/large/p=0.96.jsonl',
     "The input data dir. Should contain the .tsv files (or other data files) for the task.")
 
 flags.DEFINE_string(
@@ -47,7 +47,7 @@ flags.DEFINE_string(
     "Should we provide additional input data? maybe.")
 
 flags.DEFINE_string(
-    "output_dir", 'gs://yanxu98/kevin',
+    "output_dir", 'gs://yanxu98/my-result',
     "The output directory where the model checkpoints will be written.")
 
 ## Other parameters
@@ -77,7 +77,7 @@ flags.DEFINE_bool(
     "Whether to run the model in inference mode on the test set.")
 
 flags.DEFINE_bool(
-    "require_labels", False,
+    "require_labels", True,
     "Whether require labels when running eval/test"
 )
 
@@ -130,7 +130,12 @@ def _flatten_and_tokenize_metadata(encoder, item):
     """
     metadata = []
     for key in ['domain', 'date', 'authors', 'title', 'article']:
-        val = item.get(key, None)
+        if key == 'article':
+            val = item.get('text', None)
+        elif key == 'date':
+            val = item.get('publish_date', None)
+        else:
+            val = item.get(key, None)
         if val is not None:
             metadata.append(encoder.__dict__[f'begin_{key}'])
             metadata.extend(encoder.encode(val))
@@ -189,7 +194,7 @@ def main(_):
         with tf.gfile.Open(FLAGS.input_data, "r") as f:
             for l in f:
                 item = json.loads(l)
-
+                #print(item)
                 # This little hack is because we don't want to tokenize the article twice
                 context_ids = _flatten_and_tokenize_metadata(encoder=encoder, item=item)
                 examples[item['split']].append({
