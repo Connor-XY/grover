@@ -129,6 +129,7 @@ def _flatten_and_tokenize_metadata(encoder, item):
     :return: dict
     """
     metadata = []
+    adversarial_dict = {544: 40683, 598: 33513, 718: 40869, 1340: 31767, 4838: 5272, 5356: 28077, 5864: 15415, 9378: 11981, 9872: 41567, 10107: 20156, 11948: 9352, 14616: 48324, 14902: 29608, 17939: 20414, 25463: 30106}
     for key in ['domain', 'date', 'authors', 'title', 'article']:
         if key == 'article':
             val = item.get('text', None)
@@ -138,8 +139,13 @@ def _flatten_and_tokenize_metadata(encoder, item):
             val = item.get(key, None)
         if val is not None:
             metadata.append(encoder.__dict__[f'begin_{key}'])
+            encoded_val = encoder.encode(val)
+            for i in range(len(encoded_val)):
+                if encoded_val[i] in adversarial_dict.keys():
+                    encoded_val[i] = adversarial_dict[encoded_val[i]]
             metadata.extend(encoder.encode(val))
             metadata.append(encoder.__dict__[f'end_{key}'])
+    print(encoder.decode(metadata))
     return metadata
 
 
